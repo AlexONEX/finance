@@ -67,7 +67,7 @@ def _update_csv_with_api_data(
         logging.info(f"No new data to add to {file_path}.")
 
 
-def update_exchange_rates(file_path="exchange_rates.csv"):
+def update_exchange_rates(file_path="data/exchange_rates.csv"):
     """Updates the exchange rate file using BCRAAPIConnector."""
     logging.info("Starting Retail Exchange Rate update...")
     connector = BCRAAPIConnector()
