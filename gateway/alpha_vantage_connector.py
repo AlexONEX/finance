@@ -22,9 +22,9 @@ class AlphaVantageAPIConnector:
         from dotenv import load_dotenv
 
         load_dotenv()
-        self.api_key = os.getenv("ALPHAVANTAGE_API_KEY")
+        self.api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
         if not self.api_key:
-            logging.warning("Environment variable ALPHAVANTAGE_API_KEY is not set.")
+            logging.warning("Environment variable ALPHA_VANTAGE_API_KEY is not set.")
 
     def get_cpi_data(self):
         """Fetches the monthly CPI data series."""
