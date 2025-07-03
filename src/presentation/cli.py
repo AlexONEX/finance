@@ -124,13 +124,17 @@ def get_transaction_details() -> dict:
         "Invalid type. Please enter 'BUY' or 'SELL'.",
     )
     date_obj = get_validated_input(
-        "Enter date (DD-MM-YYYY): ",
-        lambda v: datetime.strptime(v, "%d-%m-%Y"),
+        "Enter date (DD-MM-YYYY) [default: today]: ",
+        lambda v: datetime.today()
+        if not v
+        else datetime.strptime(v, "%d-%m-%Y"),
         "Invalid date format. Please use DD-MM-YYYY.",
     )
     asset_type = get_validated_input(
         "Asset type (ACCION, CEDEAR, RF): ",
-        lambda v: v.upper() if v.upper() in ["ACCION", "CEDEAR", "RF"] else int("err"),
+        lambda v: v.upper()
+        if v.upper() in ["ACCION", "CEDEAR", "RF", "OPCION"]
+        else int("err"),
         "Invalid type.",
     )
     ticker = input("Ticker: ").upper()
@@ -173,15 +177,13 @@ def main():
         repository = PortfolioRepository()
         ppi_gateway = PPIGateway()
         print("Giving services time to connect...")
-        time.sleep(5)  # Dar tiempo a la conexión de RT para que se establezca
+        time.sleep(5)
         print("Services initialized successfully.")
     except Exception as e:
         print(f"FATAL: Could not initialize services. Error: {e}")
         return
 
     while True:
-        # Cargar el estado más reciente del portafolio en cada iteración del menú
-        # para reflejar los cambios de las transacciones.
         portfolio = repository.load_full_portfolio()
         reporting_service = ReportingService(portfolio, ppi_gateway)
         transaction_service = TransactionService(portfolio, repository)
@@ -212,7 +214,7 @@ def main():
 
         elif choice == "4":
             print("\nStarting economic data update...")
-            # data_fetcher.update_all_data() # Esta función debería ser llamada aquí
+            data_fetcher.update_all_data()
             print("Economic data update process finished.")
 
         elif choice == "5":
