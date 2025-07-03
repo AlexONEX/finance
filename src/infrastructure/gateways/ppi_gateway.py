@@ -61,10 +61,10 @@ class PPIGateway:
     def _start_realtime_connection(self):
         """Connects to the market data stream and starts listening."""
         logging.info("Starting real-time market data connection thread...")
+
+        # Llama a la función pasando los tres manejadores como argumentos posicionales
         self.client.realtime.connect_to_market_data(
-            on_connect=self._on_connect,
-            on_disconnect=self._on_disconnect,
-            on_message=self._on_market_data,
+            self._on_connect, self._on_disconnect, self._on_market_data
         )
         self.client.realtime.start_connections()
 
