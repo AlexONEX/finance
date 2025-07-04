@@ -1,7 +1,6 @@
 import pandas as pd
 import logging
 
-# Local application imports
 import config
 from domain.portfolio import Portfolio
 from application.reporting_service import ReportingService
