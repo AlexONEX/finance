@@ -1,8 +1,5 @@
-"""
-Entry point for running the Command-Line Interface.
-"""
-from src.presentation.cli import main
+from src.application.report_orchestrator import ReportOrchestrator
 
 if __name__ == "__main__":
-    print("Starting Portfolio Tracker CLI...")
-    main()
+    orchestrator = ReportOrchestrator()
+    orchestrator.generate_and_display_report()
