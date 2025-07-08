@@ -14,6 +14,11 @@ DOLAR_CCL_FILE = os.path.join(DATA_DIR, "dolar_ccl.csv")
 DOLAR_MEP_FILE = os.path.join(DATA_DIR, "dolar_mep.csv")
 RETAIL_DOLAR_FILE = os.path.join(DATA_DIR, "retail_dolar.csv")
 
+# Ratio para precios de bonos y letras (precio por cada 100 V/N)
+BOND_PRICE_DIVISOR = 100
+# Tamaño del lote para opciones (cantidad de acciones por contrato)
+OPTION_LOT_SIZE = 100
+
 TRANSACTIONS_FILE = "transactions.json"
 
 AMBITO_BASE_URL = "https://mercados.ambito.com"

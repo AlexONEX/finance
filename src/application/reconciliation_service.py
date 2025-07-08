@@ -192,11 +192,12 @@ def _save_portfolio_state(open_positions, newly_closed_trades):
         columns={
             "date": "purchase_date",
             "broker_id": "broker_transaction_id",
-            "price": "original_price",
             "currency": "original_currency",
         },
         inplace=True,
     )
+
+    # MODIFICACIÓN: Define la nueva lista de columnas finales
     final_cols = [
         "purchase_date",
         "ticker",
@@ -204,17 +205,18 @@ def _save_portfolio_state(open_positions, newly_closed_trades):
         "total_cost_ars",
         "total_cost_usd",
         "asset_type",
-        "original_price",
         "original_currency",
-        "underlying_asset",
-        "option_type",
-        "strike_price",
-        "expiration_date",
+        "lotes",
+        "market_fees",
+        "broker_fees",
+        "taxes",
         "broker_transaction_id",
     ]
+
     for col in final_cols:
         if col not in open_df.columns:
             open_df[col] = pd.NA
+
     open_df[final_cols].to_csv(
         config.OPEN_POSITIONS_FILE, index=False, date_format="%Y-%m-%d"
     )

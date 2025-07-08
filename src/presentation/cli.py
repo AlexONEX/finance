@@ -125,32 +125,39 @@ def get_transaction_details() -> dict:
     )
     date_obj = get_validated_input(
         "Enter date (DD-MM-YYYY) [default: today]: ",
-        lambda v: datetime.today()
-        if not v
-        else datetime.strptime(v, "%d-%m-%Y"),
+        lambda v: datetime.today() if not v else datetime.strptime(v, "%d-%m-%Y"),
         "Invalid date format. Please use DD-MM-YYYY.",
     )
+    # MODIFICACIÓN: Añadir 'BONO' y 'LETRA' a la lista de tipos válidos
     asset_type = get_validated_input(
-        "Asset type (ACCION, CEDEAR, RF): ",
+        "Asset type (ACCION, CEDEAR, BONO, LETRA, OPCION): ",
         lambda v: v.upper()
-        if v.upper() in ["ACCION", "CEDEAR", "RF", "OPCION"]
+        if v.upper() in ["ACCION", "CEDEAR", "BONO", "LETRA", "OPCION"]
         else int("err"),
         "Invalid type.",
     )
     ticker = input("Ticker: ").upper()
+    # Para opciones, la cantidad son los lotes. Para el resto, son unidades.
+    prompt_quantity = "Quantity (lots for options, units for others): "
     quantity = get_validated_input(
-        "Quantity: ", parse_local_number, "Invalid number format."
+        prompt_quantity, parse_local_number, "Invalid number format."
     )
     currency = get_validated_input(
         "Currency (ARS/USD): ",
         lambda v: v.upper() if v.upper() in ["ARS", "USD"] else int("err"),
         "Invalid currency.",
     )
+    # El precio para bonos/letras es cada 100 V/N, para opciones es la prima.
+    prompt_price = "Price per unit (or per 100 V/N for bonds, or premium for options): "
     price = get_validated_input(
-        "Price per unit: ", parse_local_number, "Invalid number format."
+        prompt_price, parse_local_number, "Invalid number format."
     )
     market_fees = get_validated_input(
         "Market Fees: ", parse_local_number, "Invalid number format."
+    )
+    # MODIFICACIÓN: Añadir input para Broker Fees
+    broker_fees = get_validated_input(
+        "Broker Fees: ", parse_local_number, "Invalid number format."
     )
     taxes = get_validated_input("Taxes: ", parse_local_number, "Invalid number format.")
 
@@ -158,12 +165,13 @@ def get_transaction_details() -> dict:
         "op_type": op_type,
         "date": date_obj,
         "ticker": ticker,
+        "asset_type": asset_type,
         "quantity": quantity,
         "currency": currency,
         "price": price,
         "market_fees": market_fees,
+        "broker_fees": broker_fees,  # Nuevo campo
         "taxes": taxes,
-        "asset_type": asset_type,
     }
 
 

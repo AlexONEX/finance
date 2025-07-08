@@ -28,30 +28,54 @@ class TransactionService:
 
     def record_buy(self, details: dict):
         """Records a new buy transaction, adds it to open positions, and saves."""
-        rate = self._get_exchange_rate(details["date"], details["asset_type"])
+        asset_type = details["asset_type"].upper()
+        original_price = details["price"]
+        quantity = details["quantity"]
+
+        base_cost = 0
+        if asset_type in ["ACCION", "CEDEAR"]:
+            # Precio insertado es el precio final por unidad
+            base_cost = quantity * original_price
+        elif asset_type in ["BONO", "LETRA"]:
+            # Precio insertado es cada 100 V/N
+            adjusted_price = original_price / config.BOND_PRICE_DIVISOR
+            base_cost = quantity * adjusted_price
+        elif asset_type == "OPCION":
+            # Precio insertado es la prima, y se opera en lotes
+            # Costo = cantidad_lotes * prima * tamaño_lote
+            base_cost = quantity * original_price * config.OPTION_LOT_SIZE
+        else:
+            raise ValueError(f"Asset type '{asset_type}' not recognized for buy logic.")
+
+        # El costo total = sumar las comisiones e impuestos
+        total_fees = (
+            details["market_fees"] + details.get("broker_fees", 0) + details["taxes"]
+        )
+        cost = base_cost + total_fees
+
+        # Convertir costos a ARS y USD
+        rate = self._get_exchange_rate(details["date"], asset_type)
         if not rate:
             raise ValueError(f"Could not find exchange rate for date {details['date']}")
-
-        cost = (
-            (details["quantity"] * details["price"])
-            + details["market_fees"]
-            + details["taxes"]
-        )
 
         cost_ars, cost_usd = (
             (cost, cost / rate) if details["currency"] == "ARS" else (cost * rate, cost)
         )
 
+        # Crear el diccionario para la nueva posición con el formato deseado
         new_position = {
-            "purchase_id": pd.Timestamp.now().strftime("%Y%m%d%H%M%S%f"),
             "purchase_date": details["date"],
             "ticker": details["ticker"],
             "quantity": details["quantity"],
             "total_cost_ars": cost_ars,
             "total_cost_usd": cost_usd,
-            "asset_type": details["asset_type"],
-            "original_price": details["price"],
+            "asset_type": asset_type,
             "original_currency": details["currency"],
+            # Nuevos campos para reflejar la estructura deseada
+            "lotes": details["quantity"] if asset_type == "OPCION" else None,
+            "market_fees": details["market_fees"],
+            "broker_fees": details.get("broker_fees", 0),
+            "taxes": details["taxes"],
         }
 
         new_df = pd.DataFrame([new_position])
