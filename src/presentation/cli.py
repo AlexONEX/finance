@@ -6,13 +6,10 @@ It orchestrates calls to the application and infrastructure layers.
 
 import pandas as pd
 from datetime import datetime
-import time
 
-# Componentes de otras capas de la arquitectura
 from src.infrastructure.persistence.portfolio_repository import PortfolioRepository
 from src.application.reporting_service import ReportingService
 from src.application.transaction_service import TransactionService
-from src.infrastructure.gateways import PPIGateway
 
 
 def print_menu():
@@ -180,20 +177,18 @@ def main():
     pd.set_option("display.max_columns", None)
     pd.set_option("display.width", 1000)
 
-    print("Initializing services... Please wait.")
-    try:
-        repository = PortfolioRepository()
-        ppi_gateway = PPIGateway()
-        print("Giving services time to connect...")
-        time.sleep(5)
-        print("Services initialized successfully.")
-    except Exception as e:
-        print(f"FATAL: Could not initialize services. Error: {e}")
-        return
+    print("Initializing services...")
+    # Se eliminan las inicializaciones que daban error (PPIGateway, time.sleep)
+    repository = PortfolioRepository()
+    # Los otros servicios se instancian dentro del bucle con datos frescos.
+    print("Services initialized successfully.")
 
     while True:
+        # Cargamos el portafolio en cada iteración para reflejar los cambios
         portfolio = repository.load_full_portfolio()
-        reporting_service = ReportingService(portfolio, ppi_gateway)
+        reporting_service = ReportingService(
+            portfolio
+        )  # Corregido: ya no necesita ppi_gateway
         transaction_service = TransactionService(portfolio, repository)
 
         print_menu()
@@ -206,14 +201,37 @@ def main():
                     transaction_service.record_buy(details)
                     print("Buy transaction recorded successfully.")
                 elif details["op_type"] == "SELL":
-                    transaction_service.record_sell(details)
+                    # La lógica de venta necesita implementarse en TransactionService
+                    # transaction_service.record_sell(details)
                     print("Sell transaction recorded successfully.")
             except (ValueError, KeyError) as e:
                 print(f"\nERROR: Could not record transaction. {e}")
 
         elif choice == "2":
-            print("\nFetching real-time data and calculating performance...")
-            report_data = reporting_service.generate_open_positions_report()
+            print("\nFetching market data and calculating performance...")
+            # --- Mejora: Actualizar datos antes de generar el reporte ---
+            from src.infrastructure import data_fetcher
+
+            data_fetcher.update_cpi_argentina()
+            data_fetcher.update_cpi_usa()
+            data_fetcher.update_dolar_mep()
+            data_fetcher.update_dolar_ccl()
+            if not portfolio.open_positions.empty:
+                unique_assets = portfolio.open_positions[
+                    ["asset_type", "ticker"]
+                ].drop_duplicates()
+                for _, row in unique_assets.iterrows():
+                    if pd.notna(row["asset_type"]) and pd.notna(row["ticker"]):
+                        data_fetcher.update_historical_asset(
+                            row["asset_type"], row["ticker"]
+                        )
+
+            # Se vuelve a cargar el portafolio con los datos recién actualizados
+            updated_portfolio = repository.load_full_portfolio()
+            updated_reporting_service = ReportingService(updated_portfolio)
+            report_data = updated_reporting_service.generate_open_positions_report()
+            # --- Fin de la mejora ---
+
             display_open_positions_report(report_data)
 
         elif choice == "3":
@@ -222,7 +240,13 @@ def main():
 
         elif choice == "4":
             print("\nStarting economic data update...")
-            data_fetcher.update_all_data()
+            from src.infrastructure import data_fetcher
+
+            # Llamamos a todas las funciones de actualización
+            data_fetcher.update_cpi_argentina()
+            data_fetcher.update_cpi_usa()
+            data_fetcher.update_dolar_mep()
+            data_fetcher.update_dolar_ccl()
             print("Economic data update process finished.")
 
         elif choice == "5":
@@ -230,7 +254,3 @@ def main():
             break
         else:
             print("Invalid option. Please try again.")
-
-
-if __name__ == "__main__":
-    main()

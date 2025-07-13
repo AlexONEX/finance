@@ -1,5 +1,4 @@
-from src.application.report_orchestrator import ReportOrchestrator
+from src.presentation.cli import main
 
 if __name__ == "__main__":
-    orchestrator = ReportOrchestrator()
-    orchestrator.generate_and_display_report()
+    main()

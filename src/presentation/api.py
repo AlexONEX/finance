@@ -1,13 +1,19 @@
 from flask import Flask, request, jsonify
 import logging
-from src.domain.portfolio import Portfolio
-from src.shared.utils import map_instrument_to_asset_type, parse_option_details
+import pandas as pd
+
+from src.infrastructure.persistence.portfolio_repository import PortfolioRepository
+from src.application.transaction_service import TransactionService
+from src.application.reporting_service import ReportingService
+from src.shared.financial_utils import (
+    map_instrument_to_asset_type,
+    parse_option_details,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 app = Flask(__name__)
-portfolio = Portfolio()
 
 
 def parse_transaction_request(data: dict) -> dict:
@@ -31,15 +37,17 @@ def parse_transaction_request(data: dict) -> dict:
 
     parsed = {
         "broker_transaction_id": data.get("id"),
-        "date_str": data["operationDate"].split("T")[0],
+        "date": pd.to_datetime(data["operationDate"].split("T")[0]),
         "ticker": ticker,
         "currency": currency,
         "quantity": float(data["executedAmount"]),
         "price": price,
+        # Se asume que las comisiones e impuestos se manejan en el servicio
         "market_fees": abs(
             float(data.get("total", 0)) - float(data.get("totalGross", 0))
         ),
-        "taxes": 0,
+        "broker_fees": 0,  # Placeholder, as it's not in the provided JSON structure
+        "taxes": 0,  # Placeholder
         "asset_type": asset_type,
     }
 
@@ -58,8 +66,20 @@ def parse_transaction_request(data: dict) -> dict:
 def get_open_positions():
     """Endpoint to retrieve all open positions."""
     try:
-        positions = portfolio.get_open_positions()
-        return jsonify({"status": "success", "data": positions}), 200
+        repository = PortfolioRepository()
+        portfolio = repository.load_full_portfolio()
+        reporting_service = ReportingService(portfolio)
+        report = reporting_service.generate_open_positions_report()
+
+        consolidated_json = report["consolidated"].to_dict(orient="records")
+        options_json = report["options"].to_dict(orient="records")
+
+        return jsonify(
+            {
+                "status": "success",
+                "data": {"consolidated": consolidated_json, "options": options_json},
+            }
+        ), 200
     except Exception as e:
         logging.error(f"Error retrieving open positions: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -69,8 +89,14 @@ def get_open_positions():
 def get_closed_positions():
     """Endpoint to retrieve all closed positions."""
     try:
-        positions = portfolio.get_closed_positions()
-        return jsonify({"status": "success", "data": positions}), 200
+        repository = PortfolioRepository()
+        portfolio = repository.load_full_portfolio()
+        reporting_service = ReportingService(portfolio)
+        report = reporting_service.generate_closed_trades_report()
+
+        return jsonify(
+            {"status": "success", "data": report.to_dict(orient="records")}
+        ), 200
     except Exception as e:
         logging.error(f"Error retrieving closed positions: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -83,15 +109,6 @@ def add_transaction():
     if not data:
         return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
-    broker_id = data.get("id")
-    if broker_id and portfolio.is_transaction_processed(broker_id):
-        return jsonify(
-            {
-                "status": "skipped_duplicate",
-                "message": f"Transaction ID {broker_id} already processed.",
-            }
-        ), 200
-
     op_type = data.get("orderOperation")
     if op_type not in ["BUY", "SELL"] or data.get("state") != "FULFILLED":
         return jsonify(
@@ -102,22 +119,57 @@ def add_transaction():
         ), 200
 
     try:
+        repository = PortfolioRepository()
+        portfolio = repository.load_full_portfolio()
+
+        broker_id = str(data.get("id"))
+        all_ids = set()
+
+        if (
+            not portfolio.open_positions.empty
+            and "broker_transaction_id" in portfolio.open_positions.columns
+        ):
+            all_ids.update(
+                portfolio.open_positions["broker_transaction_id"].dropna().astype(str)
+            )
+
+        if not portfolio.closed_trades.empty:
+            if "buy_broker_transaction_id" in portfolio.closed_trades.columns:
+                all_ids.update(
+                    portfolio.closed_trades["buy_broker_transaction_id"]
+                    .dropna()
+                    .astype(str)
+                )
+            if "sell_broker_transaction_id" in portfolio.closed_trades.columns:
+                all_ids.update(
+                    portfolio.closed_trades["sell_broker_transaction_id"]
+                    .dropna()
+                    .astype(str)
+                )
+
+        if broker_id in all_ids:
+            return jsonify(
+                {
+                    "status": "skipped_duplicate",
+                    "message": f"Transaction ID {broker_id} already processed.",
+                }
+            ), 200
+
         tx_data = parse_transaction_request(data)
+
+        transaction_service = TransactionService(portfolio, repository)
+
+        if op_type == "BUY":
+            transaction_service.record_buy(tx_data)
+        elif op_type == "SELL":
+            transaction_service.record_sell(tx_data)
+
+        msg = f"Successfully processed {op_type} for {tx_data['quantity']} of {tx_data['ticker']}."
+        return jsonify({"status": "success", "message": msg}), 201
+
     except (KeyError, TypeError, ValueError) as e:
         logging.error(f"Error parsing transaction data: {e} - Data: {data}")
         return jsonify({"status": "error", "message": f"Data parsing error: {e}"}), 400
-
-    try:
-        if op_type == "BUY":
-            portfolio.record_buy(**tx_data)
-        elif op_type == "SELL":
-            # record_sell might have a different signature, e.g., quantity_to_sell
-            tx_data["quantity_to_sell"] = tx_data.pop("quantity")
-            portfolio.record_sell(**tx_data)
-
-        msg = f"Successfully processed {op_type} for {tx_data['quantity_to_sell'] if op_type == 'SELL' else tx_data['quantity']} of {tx_data['ticker']}."
-        logging.info(msg)
-        return jsonify({"status": "success", "message": msg}), 201
     except Exception as e:
         logging.error(f"Error processing transaction in portfolio: {e}", exc_info=True)
         return jsonify(

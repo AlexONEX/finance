@@ -9,18 +9,9 @@ class AlphaVantageAPIGateway:
     def __init__(self, api_key: str = None):
         """
         Initializes the gateway.
-
-        Args:
-            api_key: The Alpha Vantage API key. If not provided, it will be
-                     loaded from the 'ALPHA_VANTAGE_API_KEY' environment variable.
-
-        Raises:
-            ValueError: If the API key is not found.
         """
-        from dotenv import load_dotenv
-
-        load_dotenv()
-        self.api_key = api_key or os.getenv("ALPHA_VANTAGE_API_KEY")
+        retrieved_key = os.getenv("ALPHAVANTAGE_API_KEY")
+        self.api_key = api_key or retrieved_key
         if not self.api_key:
             raise ValueError("Alpha Vantage API key is not set or provided.")
 
@@ -45,14 +36,12 @@ class AlphaVantageAPIGateway:
 
     def get_cpi_data(self):
         """Fetches the monthly US CPI data series."""
-        logging.info("Contacting Alpha Vantage for CPI data...")
         params = {"function": "CPI", "interval": "monthly", "datatype": "json"}
         response = self._make_request(params)
         return response.get("data", []) if response else []
 
     def get_quote_endpoint(self, symbol: str):
         """Fetches real-time quote data for a given symbol."""
-        logging.info(f"Contacting Alpha Vantage for quote on symbol: {symbol}")
         params = {"function": "GLOBAL_QUOTE", "symbol": symbol}
         response = self._make_request(params)
 

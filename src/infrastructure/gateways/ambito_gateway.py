@@ -20,7 +20,6 @@ class AmbitoGateway:
             A list of raw data rows or None if an error occurs.
         """
         url = f"{self.BASE_URL}/{endpoint}/historico-general/{start_date}/{end_date}"
-        logging.info(f"Fetching data from: {url}")
         try:
             response = requests.get(url, headers={'User-Agent': self.USER_AGENT}, timeout=15, verify=False)
             response.raise_for_status()

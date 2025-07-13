@@ -3,7 +3,10 @@ import pandas as pd
 import logging
 import os
 import config
-from src.shared.utils import map_instrument_to_asset_type, parse_option_details
+from src.shared.financial_utils import (
+    map_instrument_to_asset_type,
+    parse_option_details,
+)
 from src.infrastructure.exchange_rate_loader import ExchangeRateLoader
 
 logging.basicConfig(
@@ -90,6 +93,33 @@ def _load_and_filter_new_transactions(processed_ids: set) -> list:
             if asset_type == "UNKNOWN":
                 continue
 
+            # **NUEVA LÓGICA PARA COMISIONES E IMPUESTOS**
+            total_gross = float(tx.get("totalGross", 0))
+            total_net = float(tx.get("total", 0))
+            commissions_data = tx.get("commissions", {})
+
+            market_tariff_pct = (
+                commissions_data.get("marketTariffPercentage", 0.0) / 100.0
+            )
+            broker_tariff_pct = commissions_data.get("tariffPercentage", 0.0) / 100.0
+
+            market_fees = total_gross * market_tariff_pct
+            broker_fees = total_gross * broker_tariff_pct
+
+            # Calcular IVA si aplica
+            total_commission = market_fees + broker_fees
+            taxes = 0
+            if commissions_data.get("commissionIva", False):
+                taxes = total_commission * 0.21  # Asumiendo 21% de IVA
+
+            # Verificación (opcional): La suma debe ser cercana al total de fees
+            calculated_fees = total_commission + taxes
+            json_fees = abs(total_net - total_gross)
+            if not pd.np.isclose(calculated_fees, json_fees, atol=0.01):
+                logging.warning(
+                    f"Fee calculation discrepancy for tx {tx_id}. Calculated: {calculated_fees}, From JSON: {json_fees}"
+                )
+
             ticker = (
                 (tx.get("symbol") or instrument.get("name", "")).replace("D", "")
                 if tx.get("currency") == "USD"
@@ -110,7 +140,10 @@ def _load_and_filter_new_transactions(processed_ids: set) -> list:
                 "quantity": float(tx["executedAmount"]),
                 "price": price,
                 "currency": tx["currency"],
-                "fees": abs(float(tx.get("total", 0)) - float(tx.get("totalGross", 0))),
+                "total_net": total_net,  # Guardamos el total neto para usarlo después
+                "market_fees": market_fees,
+                "broker_fees": broker_fees,
+                "taxes": taxes,
             }
             if asset_type == "OPCION":
                 details = parse_option_details(instrument.get("galloName", ""))
@@ -135,16 +168,9 @@ def _apply_sell_transaction(tx, open_positions, rates):
     if not rate:
         logging.warning(f"No exchange rate for {tx['ticker']} on {tx['date'].date()}")
 
-    revenue_ars = (
-        (tx["quantity"] * tx["price"]) - tx["fees"]
-        if tx["currency"] == "ARS"
-        else (((tx["quantity"] * tx["price"]) * rate) - tx["fees"])
-    )
-    revenue_usd = (
-        revenue_ars / rate
-        if rate and tx["currency"] == "ARS"
-        else (tx["quantity"] * tx["price"]) - (tx["fees"] / rate if rate else 0)
-    )
+    # Usar el total neto de la venta
+    revenue_ars = tx["total_net"] if tx["currency"] == "ARS" else tx["total_net"] * rate
+    revenue_usd = revenue_ars / rate if rate else None
 
     matching_lots = sorted(
         [p for p in open_positions if p["ticker"] == tx["ticker"]],
@@ -186,6 +212,7 @@ def _apply_sell_transaction(tx, open_positions, rates):
 
 
 def _save_portfolio_state(open_positions, newly_closed_trades):
+    # ... (sin cambios en esta función) ...
     """Saves the updated open positions and appends closed trades to CSV files."""
     open_df = pd.DataFrame(open_positions)
     open_df.rename(
@@ -197,7 +224,6 @@ def _save_portfolio_state(open_positions, newly_closed_trades):
         inplace=True,
     )
 
-    # MODIFICACIÓN: Define la nueva lista de columnas finales
     final_cols = [
         "purchase_date",
         "ticker",
@@ -217,10 +243,10 @@ def _save_portfolio_state(open_positions, newly_closed_trades):
         if col not in open_df.columns:
             open_df[col] = pd.NA
 
-    open_df[final_cols].to_csv(
-        config.OPEN_POSITIONS_FILE, index=False, date_format="%Y-%m-%d"
-    )
-    logging.info(f"{len(open_df)} open lots written to {config.OPEN_POSITIONS_FILE}.")
+    # Asegurarse de que no se guarden columnas extra como 'total_net'
+    open_df = open_df.reindex(columns=final_cols)
+
+    open_df.to_csv(config.OPEN_POSITIONS_FILE, index=False, date_format="%Y-%m-%d")
 
     if newly_closed_trades:
         new_closed_df = pd.DataFrame(newly_closed_trades)
@@ -235,23 +261,13 @@ def _save_portfolio_state(open_positions, newly_closed_trades):
             index=False,
             date_format="%Y-%m-%d",
         )
-        logging.info(
-            f"{len(new_closed_df)} new trades appended to {config.CLOSED_TRADES_FILE}."
-        )
 
 
 def reconcile_portfolio():
     """Main reconciliation script orchestrating the load, process, and save steps."""
-    logging.info(
-        f"Starting incremental reconciliation from {config.TRANSACTIONS_FILE}..."
-    )
     rates = ExchangeRateLoader()
     processed_ids = _load_processed_ids()
     new_transactions = _load_and_filter_new_transactions(processed_ids)
-
-    if not new_transactions:
-        logging.info("No new transactions to process.")
-        return
 
     try:
         open_positions = pd.read_csv(
@@ -264,28 +280,27 @@ def reconcile_portfolio():
     for tx in new_transactions:
         if tx["op_type"] == "BUY":
             rate = rates.get_rate(tx["date"], tx["asset_type"])
+
+            # Usar el total neto de la compra para el costo
             cost_ars = (
-                (tx["quantity"] * tx["price"]) + tx["fees"]
+                tx["total_net"]
                 if tx["currency"] == "ARS"
-                else ((tx["quantity"] * tx["price"]) * rate)
+                else tx["total_net"] * rate
                 if rate
                 else None
             )
-            cost_usd = (
-                cost_ars / rate
-                if rate and tx["currency"] == "ARS"
-                else (tx["quantity"] * tx["price"]) + (tx["fees"] / rate if rate else 0)
-            )
+            cost_usd = cost_ars / rate if rate else None
+
             lot = tx.copy()
             lot.update({"total_cost_ars": cost_ars, "total_cost_usd": cost_usd})
             open_positions.append(lot)
+
         elif tx["op_type"] == "SELL":
             closed_from_tx = _apply_sell_transaction(tx, open_positions, rates)
             newly_closed_trades.extend(closed_from_tx)
             open_positions = [p for p in open_positions if p["quantity"] > 0.001]
 
     _save_portfolio_state(open_positions, newly_closed_trades)
-    logging.info("Reconciliation complete.")
 
 
 if __name__ == "__main__":

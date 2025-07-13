@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import config
+import logging
 from src.domain.portfolio import Portfolio
 
 
@@ -8,9 +9,26 @@ class PortfolioRepository:
     """Manages loading and saving all portfolio data."""
 
     def _load_csv(self, file_path: str, parse_dates: list = None) -> pd.DataFrame:
-        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            return pd.read_csv(file_path, parse_dates=parse_dates)
-        return pd.DataFrame()
+        """
+        Safely loads a CSV file, parsing only the date columns that exist.
+        """
+        if not (os.path.exists(file_path) and os.path.getsize(file_path) > 0):
+            return pd.DataFrame()
+
+        try:
+            df = pd.read_csv(file_path)
+
+            # Si se solicita parsear fechas, solo se parsean las columnas que existen en el DF.
+            if parse_dates:
+                existing_date_cols = [col for col in parse_dates if col in df.columns]
+                for col in existing_date_cols:
+                    # 'coerce' convierte fechas inválidas en NaT (Not a Time) en lugar de fallar.
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
+            return df
+
+        except Exception as e:
+            logging.error(f"Could not load or parse CSV file at {file_path}: {e}")
+            return pd.DataFrame()
 
     def load_full_portfolio(self) -> Portfolio:
         """Loads all data files and instantiates the Portfolio domain object."""

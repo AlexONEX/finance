@@ -1,2 +1,0 @@
-ticker,quantity,buy_date,buy_price,buy_currency,sell_date,sell_price,sell_currency,total_cost_ars,total_revenue_ars,total_cost_usd,total_revenue_usd,buy_broker_transaction_id,sell_broker_transaction_id
-AUSO,10.0,2025-02-19,3555.0,ARS,2025-04-11,2455.0,ARS,35584.4124,24526.2356,29.50467837421024,18.39472268680672,31910725,38024564
