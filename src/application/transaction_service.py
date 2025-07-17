@@ -1,4 +1,5 @@
 import pandas as pd
+import config
 from src.domain.portfolio import Portfolio
 from src.infrastructure.persistence.portfolio_repository import PortfolioRepository
 
@@ -36,13 +37,10 @@ class TransactionService:
         if asset_type in ["ACCION", "CEDEAR"]:
             # Precio insertado es el precio final por unidad
             base_cost = quantity * original_price
-        elif asset_type in ["BONO", "LETRA"]:
-            # Precio insertado es cada 100 V/N
+        elif asset_type == "RF":
             adjusted_price = original_price / config.BOND_PRICE_DIVISOR
             base_cost = quantity * adjusted_price
         elif asset_type == "OPCION":
-            # Precio insertado es la prima, y se opera en lotes
-            # Costo = cantidad_lotes * prima * tamaño_lote
             base_cost = quantity * original_price * config.OPTION_LOT_SIZE
         else:
             raise ValueError(f"Asset type '{asset_type}' not recognized for buy logic.")

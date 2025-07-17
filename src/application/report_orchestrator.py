@@ -37,16 +37,6 @@ class ReportOrchestrator:
         data_fetcher.update_dolar_mep()
         data_fetcher.update_dolar_ccl()
 
-        # 2. Actualizar datos históricos para los activos en cartera
-        if not positions_df.empty:
-            unique_assets = positions_df[["asset_type", "ticker"]].drop_duplicates()
-            for _, row in unique_assets.iterrows():
-                # Asegurarse de que el asset_type y ticker son válidos
-                if pd.notna(row["asset_type"]) and pd.notna(row["ticker"]):
-                    data_fetcher.update_historical_asset(
-                        row["asset_type"], row["ticker"]
-                    )
-
     def generate_and_display_report(self):
         """
         Ejecuta el flujo completo para generar y mostrar el reporte en la consola.

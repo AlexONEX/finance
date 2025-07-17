@@ -104,7 +104,6 @@ def get_closed_positions():
 
 @app.route("/transaction", methods=["POST"])
 def add_transaction():
-    """Endpoint to add a new transaction to the portfolio."""
     data = request.get_json()
     if not data:
         return jsonify({"status": "error", "message": "Invalid JSON"}), 400
@@ -119,12 +118,29 @@ def add_transaction():
         ), 200
 
     try:
+        instrument_data = data.get("instrument", {})
+        # Usamos la función existente para determinar el tipo de activo
+        asset_type = map_instrument_to_asset_type(instrument_data)
+
+        if asset_type == "OPCION":
+            logging.info(f"Ignoring option transaction: {data.get('id')}")
+            return jsonify(
+                {
+                    "status": "skipped_option",
+                    "id": data.get("id"),
+                    "message": "Transaction was ignored because it is an option.",
+                }
+            ), 200
+    except Exception as e:
+        # Esto es una salvaguarda en caso de que la data del instrumento sea extraña
+        logging.warning(f"Could not determine asset type for tx {data.get('id')}: {e}")
+
+    try:
         repository = PortfolioRepository()
         portfolio = repository.load_full_portfolio()
 
         broker_id = str(data.get("id"))
         all_ids = set()
-
         if (
             not portfolio.open_positions.empty
             and "broker_transaction_id" in portfolio.open_positions.columns
@@ -132,7 +148,6 @@ def add_transaction():
             all_ids.update(
                 portfolio.open_positions["broker_transaction_id"].dropna().astype(str)
             )
-
         if not portfolio.closed_trades.empty:
             if "buy_broker_transaction_id" in portfolio.closed_trades.columns:
                 all_ids.update(
@@ -146,7 +161,6 @@ def add_transaction():
                     .dropna()
                     .astype(str)
                 )
-
         if broker_id in all_ids:
             return jsonify(
                 {
@@ -156,7 +170,6 @@ def add_transaction():
             ), 200
 
         tx_data = parse_transaction_request(data)
-
         transaction_service = TransactionService(portfolio, repository)
 
         if op_type == "BUY":
@@ -164,12 +177,14 @@ def add_transaction():
         elif op_type == "SELL":
             transaction_service.record_sell(tx_data)
 
-        msg = f"Successfully processed {op_type} for {tx_data['quantity']} of {tx_data['ticker']}."
-        return jsonify({"status": "success", "message": msg}), 201
+        return jsonify(
+            {"status": "processed", "id": tx_data.get("broker_transaction_id")}
+        ), 200
 
     except (KeyError, TypeError, ValueError) as e:
         logging.error(f"Error parsing transaction data: {e} - Data: {data}")
         return jsonify({"status": "error", "message": f"Data parsing error: {e}"}), 400
+
     except Exception as e:
         logging.error(f"Error processing transaction in portfolio: {e}", exc_info=True)
         return jsonify(

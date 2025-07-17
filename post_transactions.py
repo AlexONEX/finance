@@ -7,10 +7,6 @@ TRANSACTIONS_FILE = "transactions.json"
 
 
 def send_transactions():
-    """
-    Lee las transacciones desde un archivo JSON y las envía una por una
-    al endpoint /transaction de la API.
-    """
     try:
         with open(TRANSACTIONS_FILE, "r", encoding="utf-8") as f:
             transactions = json.load(f)
@@ -23,7 +19,7 @@ def send_transactions():
 
     headers = {"Content-Type": "application/json"}
 
-    # Invertimos la lista para procesar las operaciones desde la más antigua a la más nueva
+    transactions.reverse()
     print(f"Se encontraron {len(transactions)} transacciones para procesar.")
 
     for i, tx in enumerate(transactions):
@@ -33,17 +29,13 @@ def send_transactions():
         try:
             response = requests.post(API_URL, headers=headers, json=tx, timeout=15)
 
-            # Imprimir la respuesta de la API para saber qué pasó
-            print(
-                f"-> Respuesta de la API (Status {response.status_code}): {response.json()}"
-            )
+            print(f"-> Api response: {response.status_code} - {response.reason}")
 
         except requests.exceptions.RequestException as e:
             print(f"!! Error de conexión al enviar la transacción {tx_id}: {e}")
             print("!! Asegúrate de que la API esté corriendo con 'python3 run_api.py'")
-            break  # Si la API no responde, no tiene sentido seguir.
+            break
 
-        # Pequeña pausa para no saturar la API y poder leer el output
         time.sleep(0.1)
 
     print("\nProceso finalizado.")

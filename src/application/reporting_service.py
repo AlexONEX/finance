@@ -1,41 +1,67 @@
 # src/application/reporting_service.py
 import pandas as pd
-import os
 import logging
-import config
 from src.domain.portfolio import Portfolio
 from src.shared.financial_utils import calculate_inflation_period
+from src.infrastructure.gateways.data912_connector import Data912APIConnector
 
 
 class ReportingService:
     def __init__(self, portfolio: Portfolio):
         self.portfolio = portfolio
+        self.api_connector = Data912APIConnector()
+        self.price_cache = {}
+
+    def _get_live_prices_by_type(self, asset_type: str):
+        """
+        Busca todos los precios en vivo para un tipo de activo y los guarda en caché.
+        """
+        # Si ya buscamos este tipo de activo, no lo volvemos a hacer.
+        if asset_type in self.price_cache:
+            return self.price_cache[asset_type]
+
+        logging.info(f"Buscando precios en vivo para: {asset_type}...")
+
+        # Mapeo de tipos de activo a funciones del conector
+        fetcher_map = {
+            "ACCION": self.api_connector.get_arg_stocks,
+            "CEDEAR": self.api_connector.get_arg_cedears,
+            "BONO": self.api_connector.get_arg_bonds,
+            "LETRA": self.api_connector.get_arg_notes,
+        }
+
+        # Llama a la función correspondiente de la API
+        fetch_function = fetcher_map.get(asset_type.upper())
+        if not fetch_function:
+            self.price_cache[asset_type] = {}  # Guardar caché vacío si no hay función
+            return {}
+
+        # Obtenemos los datos y los convertimos en un diccionario para búsqueda rápida
+        live_data = fetch_function()
+        prices = {item["t"]: item.get("c", 0) for item in live_data if "t" in item}
+
+        # Guardamos el resultado en la caché para no volver a llamar a la API
+        self.price_cache[asset_type] = prices
+        return prices
 
     def _get_current_price(self, asset_type: str, ticker: str) -> float | None:
-        """Lee el último precio del archivo CSV de datos históricos."""
+        """
+        Obtiene el precio actual en vivo desde la API, usando una caché para ser eficiente.
+        """
         if pd.isna(asset_type) or pd.isna(ticker):
             return None
 
-        asset_type_lower = asset_type.lower()
-        file_path = os.path.join(
-            config.DATA_DIR, f"historical_{asset_type_lower}_{ticker}.csv"
-        )
+        # Busca el diccionario de precios para el tipo de activo (usa la caché)
+        price_dict = self._get_live_prices_by_type(asset_type)
 
-        if not os.path.exists(file_path):
-            logging.warning(
-                f"No historical data file found for {ticker} at {file_path}"
-            )
+        # Devuelve el precio para el ticker específico
+        price = price_dict.get(ticker.upper())
+
+        if price is None:
+            logging.warning(f"No se encontró precio en vivo para el ticker: {ticker}")
             return None
 
-        try:
-            hist_df = pd.read_csv(file_path)
-            if not hist_df.empty:
-                # Devuelve el último precio de la columna 'c' (close)
-                return hist_df["c"].iloc[-1]
-        except Exception as e:
-            logging.error(f"Could not read or parse historical file for {ticker}: {e}")
-
-        return None
+        return float(price)
 
     def generate_open_positions_report(self) -> dict:
         """
@@ -44,6 +70,7 @@ class ReportingService:
         if self.portfolio.open_positions.empty:
             return {"consolidated": pd.DataFrame(), "options": pd.DataFrame()}
 
+        self.price_cache = {}
         positions = self.portfolio.open_positions.copy()
 
         # 1. Calcular el precio y valor actual de cada posición
