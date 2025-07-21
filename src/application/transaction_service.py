@@ -35,7 +35,6 @@ class TransactionService:
 
         base_cost = 0
         if asset_type in ["ACCION", "CEDEAR"]:
-            # Precio insertado es el precio final por unidad
             base_cost = quantity * original_price
         elif asset_type == "RF":
             adjusted_price = original_price / config.BOND_PRICE_DIVISOR
@@ -45,13 +44,11 @@ class TransactionService:
         else:
             raise ValueError(f"Asset type '{asset_type}' not recognized for buy logic.")
 
-        # El costo total = sumar las comisiones e impuestos
         total_fees = (
             details["market_fees"] + details.get("broker_fees", 0) + details["taxes"]
         )
         cost = base_cost + total_fees
 
-        # Convertir costos a ARS y USD
         rate = self._get_exchange_rate(details["date"], asset_type)
         if not rate:
             raise ValueError(f"Could not find exchange rate for date {details['date']}")
@@ -60,7 +57,6 @@ class TransactionService:
             (cost, cost / rate) if details["currency"] == "ARS" else (cost * rate, cost)
         )
 
-        # Crear el diccionario para la nueva posición con el formato deseado
         new_position = {
             "purchase_date": details["date"],
             "ticker": details["ticker"],
@@ -69,17 +65,24 @@ class TransactionService:
             "total_cost_usd": cost_usd,
             "asset_type": asset_type,
             "original_currency": details["currency"],
-            # Nuevos campos para reflejar la estructura deseada
             "lotes": details["quantity"] if asset_type == "OPCION" else None,
             "market_fees": details["market_fees"],
             "broker_fees": details.get("broker_fees", 0),
             "taxes": details["taxes"],
+            "broker_transaction_id": details.get("broker_transaction_id"),
         }
 
         new_df = pd.DataFrame([new_position])
-        self.portfolio.open_positions = pd.concat(
-            [self.portfolio.open_positions, new_df], ignore_index=True
-        )
+
+        # --- CORRECCIÓN PARA EVITAR EL WARNING ---
+        if self.portfolio.open_positions.empty:
+            self.portfolio.open_positions = new_df
+        else:
+            self.portfolio.open_positions = pd.concat(
+                [self.portfolio.open_positions, new_df], ignore_index=True
+            )
+        # --- FIN DE LA CORRECCIÓN ---
+
         self.repository.save_open_positions(self.portfolio.open_positions)
 
     def record_sell(self, details: dict):
@@ -95,11 +98,30 @@ class TransactionService:
             raise ValueError(f"Not enough quantity of {details['ticker']} to sell.")
 
         rate = self._get_exchange_rate(details["date"], details["asset_type"])
-        revenue = (
-            (details["quantity"] * details["price"])
-            - details["market_fees"]
-            - details["taxes"]
+        if not rate:
+            raise ValueError(f"Could not find exchange rate for date {details['date']}")
+
+        original_price = details["price"]
+        quantity = details["quantity"]
+        asset_type = details["asset_type"].upper()
+
+        gross_revenue = 0
+        if asset_type in ["ACCION", "CEDEAR"]:
+            gross_revenue = quantity * original_price
+        elif asset_type == "RF":
+            gross_revenue = (quantity * original_price) / config.BOND_PRICE_DIVISOR
+        elif asset_type == "OPCION":
+            gross_revenue = quantity * original_price * config.OPTION_LOT_SIZE
+        else:
+            raise ValueError(
+                f"Asset type '{asset_type}' not recognized for sell logic."
+            )
+
+        total_fees = (
+            details["market_fees"] + details.get("broker_fees", 0) + details["taxes"]
         )
+        revenue = gross_revenue - total_fees
+
         revenue_ars, revenue_usd = (
             (revenue, revenue / rate)
             if details["currency"] == "ARS"
@@ -125,22 +147,26 @@ class TransactionService:
                 "total_cost_usd": lot["total_cost_usd"] * proportion,
                 "total_revenue_ars": revenue_ars * (qty_from_lot / details["quantity"]),
                 "total_revenue_usd": revenue_usd * (qty_from_lot / details["quantity"]),
+                "buy_broker_transaction_id": lot.get("broker_transaction_id"),
+                "sell_broker_transaction_id": details.get("broker_transaction_id"),
             }
             newly_closed_trades.append(closed_trade)
 
-            # Update open positions dataframe
             open_lots.loc[index, "quantity"] -= qty_from_lot
             open_lots.loc[index, "total_cost_ars"] -= closed_trade["total_cost_ars"]
             open_lots.loc[index, "total_cost_usd"] -= closed_trade["total_cost_usd"]
             quantity_to_sell -= qty_from_lot
 
-        # Remove fully sold lots and save
         self.portfolio.open_positions = open_lots[open_lots["quantity"] > 0.001]
         self.repository.save_open_positions(self.portfolio.open_positions)
 
-        # Append new closed trades and save
         new_closed_df = pd.DataFrame(newly_closed_trades)
-        self.portfolio.closed_trades = pd.concat(
-            [self.portfolio.closed_trades, new_closed_df], ignore_index=True
-        )
+
+        if self.portfolio.closed_trades.empty:
+            self.portfolio.closed_trades = new_closed_df
+        else:
+            self.portfolio.closed_trades = pd.concat(
+                [self.portfolio.closed_trades, new_closed_df], ignore_index=True
+            )
+
         self.repository.save_closed_trades(self.portfolio.closed_trades)

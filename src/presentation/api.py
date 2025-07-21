@@ -1,6 +1,10 @@
 from flask import Flask, request, jsonify
 import logging
 import pandas as pd
+import re
+import os
+import json
+import config
 
 from src.infrastructure.persistence.portfolio_repository import PortfolioRepository
 from src.application.transaction_service import TransactionService
@@ -30,10 +34,27 @@ def parse_transaction_request(data: dict) -> dict:
     currency = data["currency"]
     price = float(data["shareValue"])
 
-    if instrument.get("priceUnitScale") == 100:
-        price /= 100.0
-    if currency == "USD" and ticker.upper().endswith("D"):
+    if currency == "USD" and ticker and ticker.upper().endswith("D"):
         ticker = ticker[:-1]
+
+    if asset_type == "OPCION":
+        gallo_name = instrument.get("galloName", "")
+        if gallo_name:
+            sanitized_ticker = re.sub(r"[\s.,()]", "", gallo_name).upper()
+            ticker = sanitized_ticker
+
+    total_gross = float(data.get("totalGross", 0))
+    commissions_data = data.get("commissions", {})
+    market_tariff_pct = commissions_data.get("marketTariffPercentage", 0.0) / 100.0
+    broker_tariff_pct = commissions_data.get("tariffPercentage", 0.0) / 100.0
+    market_fees = abs(total_gross * market_tariff_pct)
+    broker_fees = abs(total_gross * broker_tariff_pct)
+    total_commission = market_fees + broker_fees
+    taxes = (
+        abs(total_commission * 0.21)
+        if commissions_data.get("commissionIva", False)
+        else 0
+    )
 
     parsed = {
         "broker_transaction_id": data.get("id"),
@@ -42,12 +63,9 @@ def parse_transaction_request(data: dict) -> dict:
         "currency": currency,
         "quantity": float(data["executedAmount"]),
         "price": price,
-        # Se asume que las comisiones e impuestos se manejan en el servicio
-        "market_fees": abs(
-            float(data.get("total", 0)) - float(data.get("totalGross", 0))
-        ),
-        "broker_fees": 0,  # Placeholder, as it's not in the provided JSON structure
-        "taxes": 0,  # Placeholder
+        "market_fees": market_fees,
+        "broker_fees": broker_fees,
+        "taxes": taxes,
         "asset_type": asset_type,
     }
 
@@ -70,10 +88,8 @@ def get_open_positions():
         portfolio = repository.load_full_portfolio()
         reporting_service = ReportingService(portfolio)
         report = reporting_service.generate_open_positions_report()
-
         consolidated_json = report["consolidated"].to_dict(orient="records")
         options_json = report["options"].to_dict(orient="records")
-
         return jsonify(
             {
                 "status": "success",
@@ -93,7 +109,6 @@ def get_closed_positions():
         portfolio = repository.load_full_portfolio()
         reporting_service = ReportingService(portfolio)
         report = reporting_service.generate_closed_trades_report()
-
         return jsonify(
             {"status": "success", "data": report.to_dict(orient="records")}
         ), 200
@@ -102,14 +117,25 @@ def get_closed_positions():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+def log_unresolved_transaction(data: dict, error: Exception):
+    """Appends a failed transaction to the to_resolve.csv file."""
+    file_exists = os.path.exists(config.TO_RESOLVE_FILE)
+    with open(config.TO_RESOLVE_FILE, "a", newline="", encoding="utf-8") as f:
+        f.write(
+            json.dumps({"id": data.get("id"), "error": str(error), "data": data}) + "\n"
+        )
+
+
 @app.route("/transaction", methods=["POST"])
 def add_transaction():
     data = request.get_json()
     if not data:
         return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
+    valid_states = ["FULFILLED", "PARTIALLY_FULLFILLED"]
     op_type = data.get("orderOperation")
-    if op_type not in ["BUY", "SELL"] or data.get("state") != "FULFILLED":
+
+    if op_type not in ["BUY", "SELL"] or data.get("state") not in valid_states:
         return jsonify(
             {
                 "status": "skipped",
@@ -118,27 +144,8 @@ def add_transaction():
         ), 200
 
     try:
-        instrument_data = data.get("instrument", {})
-        # Usamos la función existente para determinar el tipo de activo
-        asset_type = map_instrument_to_asset_type(instrument_data)
-
-        if asset_type == "OPCION":
-            logging.info(f"Ignoring option transaction: {data.get('id')}")
-            return jsonify(
-                {
-                    "status": "skipped_option",
-                    "id": data.get("id"),
-                    "message": "Transaction was ignored because it is an option.",
-                }
-            ), 200
-    except Exception as e:
-        # Esto es una salvaguarda en caso de que la data del instrumento sea extraña
-        logging.warning(f"Could not determine asset type for tx {data.get('id')}: {e}")
-
-    try:
         repository = PortfolioRepository()
         portfolio = repository.load_full_portfolio()
-
         broker_id = str(data.get("id"))
         all_ids = set()
         if (
@@ -181,9 +188,10 @@ def add_transaction():
             {"status": "processed", "id": tx_data.get("broker_transaction_id")}
         ), 200
 
-    except (KeyError, TypeError, ValueError) as e:
-        logging.error(f"Error parsing transaction data: {e} - Data: {data}")
-        return jsonify({"status": "error", "message": f"Data parsing error: {e}"}), 400
+    except ValueError as e:
+        logging.error(f"Logical error processing transaction {data.get('id')}: {e}")
+        log_unresolved_transaction(data, e)
+        return jsonify({"status": "conflict", "message": f"Logical conflict: {e}"}), 409
 
     except Exception as e:
         logging.error(f"Error processing transaction in portfolio: {e}", exc_info=True)

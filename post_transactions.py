@@ -19,7 +19,6 @@ def send_transactions():
 
     headers = {"Content-Type": "application/json"}
 
-    transactions.reverse()
     print(f"Se encontraron {len(transactions)} transacciones para procesar.")
 
     for i, tx in enumerate(transactions):
@@ -28,8 +27,7 @@ def send_transactions():
 
         try:
             response = requests.post(API_URL, headers=headers, json=tx, timeout=15)
-
-            print(f"-> Api response: {response.status_code} - {response.reason}")
+            print(f"-> Respuesta de la API: {response.status_code} - {response.text}")
 
         except requests.exceptions.RequestException as e:
             print(f"!! Error de conexión al enviar la transacción {tx_id}: {e}")

@@ -9,23 +9,15 @@ class PortfolioRepository:
     """Manages loading and saving all portfolio data."""
 
     def _load_csv(self, file_path: str, parse_dates: list = None) -> pd.DataFrame:
-        """
-        Safely loads a CSV file, parsing only the date columns that exist.
-        """
         if not (os.path.exists(file_path) and os.path.getsize(file_path) > 0):
             return pd.DataFrame()
-
         try:
             df = pd.read_csv(file_path)
-
-            # Si se solicita parsear fechas, solo se parsean las columnas que existen en el DF.
             if parse_dates:
                 existing_date_cols = [col for col in parse_dates if col in df.columns]
                 for col in existing_date_cols:
-                    # 'coerce' convierte fechas inválidas en NaT (Not a Time) en lugar de fallar.
                     df[col] = pd.to_datetime(df[col], errors="coerce")
             return df
-
         except Exception as e:
             logging.error(f"Could not load or parse CSV file at {file_path}: {e}")
             return pd.DataFrame()
@@ -40,11 +32,11 @@ class PortfolioRepository:
         )
         dolar_mep = self._load_csv(config.DOLAR_MEP_FILE, ["date"])
         dolar_ccl = self._load_csv(config.DOLAR_CCL_FILE, ["date"])
-        cpi_arg = self._load_csv(config.CPI_ARG_FILE, ["date"])
+        cer_data = self._load_csv(config.CER_FILE, ["date"])
         cpi_usa = self._load_csv(config.CPI_USA_FILE, ["date"])
 
         return Portfolio(
-            open_positions, closed_trades, dolar_mep, dolar_ccl, cpi_arg, cpi_usa
+            open_positions, closed_trades, dolar_mep, dolar_ccl, cer_data, cpi_usa
         )
 
     def save_open_positions(self, open_positions_df: pd.DataFrame):

@@ -8,18 +8,18 @@ if not os.path.exists(DATA_DIR):
 OPEN_POSITIONS_FILE = os.path.join(DATA_DIR, "open_positions.csv")
 CLOSED_TRADES_FILE = os.path.join(DATA_DIR, "closed_trades.csv")
 EXCHANGE_RATES_FILE = os.path.join(DATA_DIR, "exchange_rates.csv")
-CPI_ARG_FILE = os.path.join(DATA_DIR, "cpi_argentina.csv")
+CER_FILE = os.path.join(DATA_DIR, "cer.csv")
 CPI_USA_FILE = os.path.join(DATA_DIR, "cpi_usa.csv")
 DOLAR_CCL_FILE = os.path.join(DATA_DIR, "dolar_ccl.csv")
 DOLAR_MEP_FILE = os.path.join(DATA_DIR, "dolar_mep.csv")
 RETAIL_DOLAR_FILE = os.path.join(DATA_DIR, "retail_dolar.csv")
 
-# Ratio para precios de bonos y letras (precio por cada 100 V/N)
 BOND_PRICE_DIVISOR = 100
-# Tamaño del lote para opciones (cantidad de acciones por contrato)
 OPTION_LOT_SIZE = 100
 
 TRANSACTIONS_FILE = "transactions.json"
+
+STARTING_OPERATING_DATE = "20-01-2025"
 
 AMBITO_BASE_URL = "https://mercados.ambito.com"
 AMBITO_DOLAR_CCL_ENDPOINT = "dolarrava/cl"

@@ -25,14 +25,10 @@ class ReportOrchestrator:
 
     def __init__(self):
         self.repository = PortfolioRepository()
-        # Aquí podrías inicializar otros gateways si fueran necesarios en toda la clase
-        # Por ahora, los servicios que lo necesitan los instancian ellos mismos.
 
     def _ensure_data_is_updated(self, positions_df):
         """Llama al data_fetcher para actualizar las fuentes de datos necesarias."""
-
-        # 1. Actualizar datos macroeconómicos
-        data_fetcher.update_cpi_argentina()
+        data_fetcher.update_cer()
         data_fetcher.update_cpi_usa()
         data_fetcher.update_dolar_mep()
         data_fetcher.update_dolar_ccl()
@@ -44,20 +40,11 @@ class ReportOrchestrator:
         pd.set_option("display.max_columns", None)
         pd.set_option("display.width", 1000)
 
-        # Cargar posiciones para saber qué activos actualizar
         initial_portfolio = self.repository.load_full_portfolio()
-
-        # Paso 1: Actualizar los datos locales (CSVs)
         self._ensure_data_is_updated(initial_portfolio.open_positions)
-
-        # Paso 2: Cargar el portafolio completo con los datos ya actualizados
         portfolio = self.repository.load_full_portfolio()
-
-        # Paso 3: Instanciar el servicio de reporting
-        # Pasamos el portfolio completo al servicio que hará los cálculos.
         reporting_service = ReportingService(portfolio)
 
-        # Paso 4: Generar y mostrar los reportes
         print("\n" + "=" * 50)
         open_positions_report = reporting_service.generate_open_positions_report()
         display_open_positions_report(open_positions_report)

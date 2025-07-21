@@ -1,3 +1,4 @@
+# src/infrastructure/gateways/bcra_gateway.py
 import requests
 import logging
 
@@ -7,20 +8,17 @@ class BCRAAPIGateway:
 
     BASE_URL = "https://api.bcra.gob.ar/estadisticas/v3.0/monetarias"
 
-    def get_series_data(self, variable_id: int, verify_ssl: bool = False):
+    def get_series_data(
+        self, variable_id: int, start_date: str, end_date: str, verify_ssl: bool = False
+    ):
         """
         Fetches the complete data series for a specific variable ID.
-
-        Args:
-            variable_id: The ID of the variable to fetch.
-            verify_ssl: Whether to verify the SSL certificate. Defaults to False.
-
-        Returns:
-            A list of data points or None if an error occurs.
+        NOTE: start_date and end_date are ignored as the new endpoint gives full history.
         """
         url = f"{self.BASE_URL}/{variable_id}"
-        logging.info(f"Contacting BCRA API for variable ID: {variable_id}")
+
         try:
+            # verify=False para evitar problemas de SSL que a veces tiene la API del BCRA.
             response = requests.get(url, timeout=15, verify=verify_ssl)
             response.raise_for_status()
             data = response.json()
