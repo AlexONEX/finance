@@ -41,8 +41,12 @@ class PortfolioRepository:
 
     def save_open_positions(self, open_positions_df: pd.DataFrame):
         """Saves the open positions DataFrame to its CSV file."""
-        open_positions_df.to_csv(config.OPEN_POSITIONS_FILE, index=False)
+        open_positions_df.to_csv(
+            config.OPEN_POSITIONS_FILE, index=False, date_format="%Y-%m-%d"
+        )
 
     def save_closed_trades(self, closed_trades_df: pd.DataFrame):
         """Saves the closed trades DataFrame to its CSV file."""
-        closed_trades_df.to_csv(config.CLOSED_TRADES_FILE, index=False)
+        closed_trades_df.to_csv(
+            config.CLOSED_TRADES_FILE, index=False, date_format="%Y-%m-%d"
+        )

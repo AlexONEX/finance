@@ -19,19 +19,15 @@ def send_transactions():
 
     headers = {"Content-Type": "application/json"}
 
-    print(f"Se encontraron {len(transactions)} transacciones para procesar.")
-
     for i, tx in enumerate(transactions):
         tx_id = tx.get("id", "N/A")
-        print(f"\n[{i + 1}/{len(transactions)}] Procesando transacción ID: {tx_id}...")
-
         try:
             response = requests.post(API_URL, headers=headers, json=tx, timeout=15)
-            print(f"-> Respuesta de la API: {response.status_code} - {response.text}")
 
         except requests.exceptions.RequestException as e:
-            print(f"!! Error de conexión al enviar la transacción {tx_id}: {e}")
-            print("!! Asegúrate de que la API esté corriendo con 'python3 run_api.py'")
+            print(f"Error al enviar la transacción {tx_id}: {e}")
+            with open("failed_transactions.log", "a", encoding="utf-8") as log_file:
+                log_file.write(f"Transacción {tx_id} fallida: {str(e)}\n")
             break
 
         time.sleep(0.1)

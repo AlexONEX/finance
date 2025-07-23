@@ -12,7 +12,8 @@ def print_menu():
     print("2. View Open Positions (with Performance)")
     print("3. View Closed Trades History")
     print("4. Update Economic Data (FX and CER)")
-    print("5. Exit")
+    print("5. Run Daily Maintenance (Expire Options)")
+    print("6. Exit")
 
 
 def display_open_positions_report(report_data: dict[str, pd.DataFrame]):
@@ -118,11 +119,11 @@ def get_transaction_details() -> dict:
         "Invalid date format. Please use DD-MM-YYYY.",
     )
     asset_type = get_validated_input(
-        "Asset type (ACCION, CEDEAR, BONO, LETRA, OPCION): ",
+        "Asset type (ACCION, CEDEAR, RF, OPCION): ",
         lambda v: v.upper()
-        if v.upper() in ["ACCION", "CEDEAR", "BONO", "LETRA", "OPCION"]
+        if v.upper() in ["ACCION", "CEDEAR", "RF", "OPCION"]
         else int("err"),
-        "Invalid type.",
+        "Invalid type. Use ACCION, CEDEAR, RF, or OPCION.",
     )
     ticker = input("Ticker: ").upper()
     prompt_quantity = "Quantity (lots for options, units for others): "
@@ -145,7 +146,8 @@ def get_transaction_details() -> dict:
         "Broker Fees: ", parse_local_number, "Invalid number format."
     )
     taxes = get_validated_input("Taxes: ", parse_local_number, "Invalid number format.")
-    return {
+
+    details = {
         "op_type": op_type,
         "date": date_obj,
         "ticker": ticker,
@@ -157,6 +159,16 @@ def get_transaction_details() -> dict:
         "broker_fees": broker_fees,
         "taxes": taxes,
     }
+
+    if asset_type == "OPCION":
+        exp_date_obj = get_validated_input(
+            "Enter expiration date (DD-MM-YYYY): ",
+            lambda v: datetime.strptime(v, "%d-%m-%Y"),
+            "Invalid date format. Please use DD-MM-YYYY.",
+        )
+        details["expiration_date"] = exp_date_obj
+
+    return details
 
 
 def main():
@@ -218,6 +230,11 @@ def main():
             print("Economic data update process finished.")
 
         elif choice == "5":
+            print("\nRunning daily maintenance tasks...")
+            transaction_service.expire_options()
+            print("Maintenance tasks finished.")
+
+        elif choice == "6":
             print("Exiting program.")
             break
         else:

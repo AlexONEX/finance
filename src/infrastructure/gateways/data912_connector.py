@@ -1,6 +1,7 @@
 import requests
 import logging
 import config
+from functools import lru_cache
 import os
 
 logging.basicConfig(
@@ -14,6 +15,7 @@ class Data912APIConnector:
         self.timeout = timeout
         logging.info(f"Conector inicializado para la URL base: {self.base_url}")
 
+    @lru_cache(maxsize=16)
     def _make_request(self, endpoint: str):
         """
         Método auxiliar para realizar peticiones GET a la API.

@@ -1,29 +1,46 @@
 import pandas as pd
 import logging
 import config
+import re
 from src.domain.portfolio import Portfolio
+from src.infrastructure.gateways.instances import data912_connector
 from src.shared.financial_utils import calculate_inflation_period
-from src.infrastructure.gateways.data912_connector import Data912APIConnector
 
 
 class ReportingService:
     def __init__(self, portfolio: Portfolio):
         self.portfolio = portfolio
-        self.api_connector = Data912APIConnector()
+        self.api_connector = data912_connector
         self.price_cache = {}
 
     def _get_live_prices_by_type(self, asset_type: str):
+        """
+        Fetches live prices from the API based on a unified mapping of asset types.
+        Caches results to avoid redundant calls.
+        """
         asset_type = asset_type.upper()
-        if asset_type == "OPCION":
-            return {}
-        fixed_income_types = ["RF", "BONO", "LETRA", "ON"]
-        if asset_type in fixed_income_types:
-            if "fixed_income" in self.price_cache:
-                return self.price_cache["fixed_income"]
-            logging.info(
-                "Buscando precios en vivo para toda la Renta Fija (Bonos, Letras, ONs)..."
-            )
-            all_prices = {}
+
+        # Mapping from our specific asset types to API endpoint functions
+        FETCHER_MAP = {
+            "CEDEAR": self.api_connector.get_arg_cedears,
+            "OPTION": self.api_connector.get_arg_options,
+            "ACCION": self.api_connector.get_arg_stocks,
+            "GENERAL": self.api_connector.get_arg_stocks,
+            "MERVAL": self.api_connector.get_arg_stocks,
+            "LIDER": self.api_connector.get_arg_stocks,
+            "PRIVATE_TITLE": self.api_connector.get_arg_stocks,
+        }
+
+        FIXED_INCOME_TYPES = ["BOND", "LETTER", "PUBLIC_TITLE", "RF", "ON"]
+        cache_key = "fixed_income" if asset_type in FIXED_INCOME_TYPES else asset_type
+
+        if cache_key in self.price_cache:
+            return self.price_cache[cache_key]
+
+        logging.info(f"Buscando precios en vivo para el grupo: {cache_key}...")
+
+        all_prices = {}
+        if cache_key == "fixed_income":
             fetch_functions = [
                 self.api_connector.get_arg_bonds,
                 self.api_connector.get_arg_notes,
@@ -33,45 +50,43 @@ class ReportingService:
                 live_data = fetch()
                 if isinstance(live_data, list):
                     prices = {
-                        item["symbol"]: item.get("c", 0)
+                        item["symbol"].upper(): item.get("c", 0)
                         for item in live_data
                         if "symbol" in item
                     }
                     all_prices.update(prices)
-            self.price_cache["fixed_income"] = all_prices
-            return all_prices
-        if asset_type in self.price_cache:
-            return self.price_cache[asset_type]
-        logging.info(f"Buscando precios en vivo para: {asset_type}...")
-        fetcher_map = {
-            "ACCION": self.api_connector.get_arg_stocks,
-            "CEDEAR": self.api_connector.get_arg_cedears,
-        }
-        fetch_function = fetcher_map.get(asset_type)
-        if not fetch_function:
-            self.price_cache[asset_type] = {}
-            return {}
-        live_data = fetch_function()
-        if not isinstance(live_data, list):
-            self.price_cache[asset_type] = {}
-            return {}
-        prices = {
-            item["symbol"]: item.get("c", 0) for item in live_data if "symbol" in item
-        }
-        self.price_cache[asset_type] = prices
-        return prices
+        else:
+            fetch_function = FETCHER_MAP.get(asset_type)
+            if fetch_function:
+                live_data = fetch_function()
+                if isinstance(live_data, list):
+                    all_prices = {
+                        re.sub(r"[\s.,()]", "", item["symbol"]).upper(): item.get(
+                            "c", 0
+                        )
+                        for item in live_data
+                        if "symbol" in item
+                    }
+
+        self.price_cache[cache_key] = all_prices
+        return all_prices
 
     def _get_current_price(self, asset_type: str, ticker: str) -> float | None:
         if pd.isna(asset_type) or pd.isna(ticker):
             return None
+
         price_dict = self._get_live_prices_by_type(asset_type)
-        price = price_dict.get(ticker.upper())
+        sanitized_ticker = re.sub(r"[\s.,()]", "", ticker).upper()
+        price = price_dict.get(sanitized_ticker)
 
         if price is None:
-            logging.warning(f"No se encontró precio en vivo para el ticker: {ticker}")
+            logging.warning(
+                f"No se encontró precio en vivo para el ticker: {ticker} (Buscado como: {sanitized_ticker})"
+            )
             return None
 
-        if asset_type.upper() in ["RF", "BONO", "LETRA", "ON"]:
+        # For fixed income, the price from the API is per 100 V/N
+        if asset_type.upper() in ["BOND", "LETTER", "PUBLIC_TITLE", "RF", "ON"]:
             return float(price) / config.BOND_PRICE_DIVISOR
 
         return float(price)
@@ -80,12 +95,12 @@ class ReportingService:
         if self.portfolio.open_positions.empty:
             return {"consolidated": pd.DataFrame(), "options": pd.DataFrame()}
 
-        self.price_cache = {}
+        self.price_cache = {}  # Reset cache for each report run
         positions = self.portfolio.open_positions.copy()
-        options_positions = positions[positions["asset_type"] == "OPCION"]
 
-        # Trabajar solo con posiciones que no son opciones
-        positions = positions[positions["asset_type"] != "OPCION"].copy()
+        # Separate options first, as they are not consolidated
+        options_positions = positions[positions["asset_type"] == "OPTION"]
+        positions = positions[positions["asset_type"] != "OPTION"].copy()
 
         if positions.empty:
             return {"consolidated": pd.DataFrame(), "options": options_positions}
@@ -98,38 +113,33 @@ class ReportingService:
                         "quantity": x["quantity"].sum(),
                         "total_cost_ars": x["total_cost_ars"].sum(),
                         "total_cost_usd": x["total_cost_usd"].sum(),
-                        "asset_type": x["asset_type"].iloc[
-                            0
-                        ],  # Tomar el tipo del primer lote
+                        "asset_type": x["asset_type"].iloc[0],
                         "first_purchase_date": x["purchase_date"].min(),
                     }
-                )
+                ),
+                include_groups=False,  # Silences the FutureWarning
             )
             .reset_index()
         )
 
-        # Calcular precio de compra promedio ponderado
         consolidated["buy_price_ars"] = (
             consolidated["total_cost_ars"] / consolidated["quantity"]
         )
-
-        # Obtener precios actuales para la cartera consolidada
         consolidated["current_price"] = consolidated.apply(
             lambda row: self._get_current_price(row["asset_type"], row["ticker"]),
             axis=1,
         )
+
+        # Drop rows where a price could not be found to avoid errors in calculation
         consolidated.dropna(subset=["current_price"], inplace=True)
 
-        # Calcular rendimientos sobre la base consolidada
         consolidated["nominal_return_ars_pct"] = (
             consolidated["current_price"] / consolidated["buy_price_ars"] - 1
         ) * 100
-
         today = pd.Timestamp.now().normalize()
         consolidated["age_days"] = (
             today - pd.to_datetime(consolidated["first_purchase_date"])
         ).dt.days
-
         consolidated["real_return_ars_pct"] = consolidated.apply(
             lambda row: (
                 (1 + row["nominal_return_ars_pct"] / 100)
@@ -144,11 +154,7 @@ class ReportingService:
             * 100,
             axis=1,
         )
-
-        return {
-            "consolidated": consolidated,
-            "options": options_positions,
-        }
+        return {"consolidated": consolidated, "options": options_positions}
 
     def generate_closed_trades_report(self) -> pd.DataFrame:
         if self.portfolio.closed_trades.empty:
@@ -228,7 +234,8 @@ class ReportingService:
                             g, "real_return_usd_pct", "total_cost_usd"
                         ),
                     }
-                )
+                ),
+                include_groups=False,
             )
             .reset_index()
         )

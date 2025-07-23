@@ -21,20 +21,15 @@ def _get_cpi_value_for_date(
         return merged["value"].iloc[0] if not merged.empty else None
 
     else:
-        # Calcular meses faltantes
         months_diff = (target_date.year - last_available_date.year) * 12 + (
             target_date.month - last_available_date.month
         )
-
-        # Calcular tasa de inflación mensual promedio de los últimos 6 meses
         if len(cpi_df) >= 7:
-            recent_cpi = cpi_df.tail(7)  # 7 puntos para 6 períodos
+            recent_cpi = cpi_df.tail(7)
             monthly_returns = recent_cpi["value"].pct_change().dropna()
             avg_monthly_inflation = monthly_returns.mean()
         else:
             avg_monthly_inflation = 0.002
-
-        # Proyectar el último valor de CPI hacia el futuro
         last_cpi_value = cpi_df["value"].iloc[-1]
         projected_cpi = last_cpi_value * ((1 + avg_monthly_inflation) ** months_diff)
         return projected_cpi
@@ -53,20 +48,32 @@ def calculate_inflation_period(start_date, end_date, cpi_df: pd.DataFrame) -> fl
 def map_instrument_to_asset_type(instrument: dict) -> str:
     if not instrument:
         return "UNKNOWN"
-    instrument_type = instrument.get("type", "").upper()
+
     op_type = instrument.get("instrumentOperationType", "").upper()
     if op_type == "OPTION":
-        return "OPCION"
+        return "OPTION"
+
+    instrument_type = instrument.get("type", "").upper()
     if instrument_type == "CEDEAR":
         return "CEDEAR"
-    if instrument_type in ["MERVAL", "GENERAL", "LIDER", "PRIVATE_TITLE"]:
-        return "ACCION"
-    if instrument_type in ["BOND", "LETTER", "PUBLIC_TITLE"]:
-        return "RF"
+
+    known_types = [
+        "MERVAL",
+        "GENERAL",
+        "LIDER",
+        "PRIVATE_TITLE",
+        "BOND",
+        "LETTER",
+        "PUBLIC_TITLE",
+    ]
+    if instrument_type in known_types:
+        return instrument_type
+
     if op_type == "PUBLIC_TITLE":
-        return "RF"
+        return "PUBLIC_TITLE"
     if op_type == "PRIVATE_TITLE":
-        return "ACCION"
+        return "PRIVATE_TITLE"
+
     return "UNKNOWN"
 
 

@@ -4,6 +4,7 @@ import pandas as pd
 from src.infrastructure import data_fetcher
 from src.infrastructure.persistence.portfolio_repository import PortfolioRepository
 from src.application.reporting_service import ReportingService
+from src.application.transaction_service import TransactionService
 from src.presentation.cli import (
     display_open_positions_report,
     display_closed_trades_report,
@@ -44,6 +45,9 @@ class ReportOrchestrator:
         self._ensure_data_is_updated(initial_portfolio.open_positions)
         portfolio = self.repository.load_full_portfolio()
         reporting_service = ReportingService(portfolio)
+
+        transaction_service = TransactionService(portfolio, self.repository)
+        transaction_service.expire_options()
 
         print("\n" + "=" * 50)
         open_positions_report = reporting_service.generate_open_positions_report()
