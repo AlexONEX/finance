@@ -1,0 +1,8 @@
+pandas
+flask
+matplotlib
+numpy
+ppi_client
+codebase-dump
+pynvim
+python-dotenv
