@@ -9,7 +9,7 @@ class BCRAAPIGateway:
     BASE_URL = "https://api.bcra.gob.ar/estadisticas/v3.0/monetarias"
 
     def get_series_data(
-        self, variable_id: int, start_date: str, end_date: str, verify_ssl: bool = False
+        self, variable_id: int, start_date: str, end_date: str, verify_ssl: bool = True
     ):
         """
         Fetches the complete data series for a specific variable ID.

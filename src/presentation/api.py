@@ -3,6 +3,7 @@ from functools import wraps
 import logging
 import pandas as pd
 import re
+from config import VAT_RATE
 
 from src.shared.types import TransactionData
 from src.infrastructure.persistence.portfolio_repository import PortfolioRepository
@@ -108,7 +109,7 @@ def parse_transaction_request(data: dict) -> dict:
     broker_fees = abs(total_gross * broker_tariff_pct)
     total_commission = market_fees + broker_fees
     taxes = (
-        abs(total_commission * 0.21)
+        abs(total_commission * VAT_RATE)
         if commissions_data.get("commissionIva", False)
         else 0
     )

@@ -19,7 +19,7 @@ class PortfolioRepository:
                     df[col] = pd.to_datetime(df[col], errors="coerce")
             return df
         except Exception as e:
-            logging.error(f"Could not load or parse CSV file at {file_path}: {e}")
+            logging.error(f"Could not load or parse CSV file at {os.path.basename(file_path)}: {e}")
             return pd.DataFrame()
 
     def load_full_portfolio(self) -> Portfolio:

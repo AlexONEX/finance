@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+from config import FALLBACK_MONTHLY_INFLATION_RATE
 
 
 def _get_cpi_value_for_date(
@@ -29,7 +30,7 @@ def _get_cpi_value_for_date(
             monthly_returns = recent_cpi["value"].pct_change().dropna()
             avg_monthly_inflation = monthly_returns.mean()
         else:
-            avg_monthly_inflation = 0.002
+            avg_monthly_inflation = FALLBACK_MONTHLY_INFLATION_RATE
         last_cpi_value = cpi_df["value"].iloc[-1]
         projected_cpi = last_cpi_value * ((1 + avg_monthly_inflation) ** months_diff)
         return projected_cpi

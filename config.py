@@ -1,5 +1,9 @@
 import os
 
+# Magic numbers and constants
+FALLBACK_MONTHLY_INFLATION_RATE = 0.002
+VAT_RATE = 0.21  # 21% VAT
+
 DATA_DIR = "data"
 
 if not os.path.exists(DATA_DIR):

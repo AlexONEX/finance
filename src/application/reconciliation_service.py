@@ -7,7 +7,6 @@ from src.shared.financial_utils import (
     map_instrument_to_asset_type,
     parse_option_details,
 )
-from src.infrastructure.exchange_rate_loader import ExchangeRateLoader
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -110,7 +109,7 @@ def _load_and_filter_new_transactions(processed_ids: set) -> list:
             total_commission = market_fees + broker_fees
             taxes = 0
             if commissions_data.get("commissionIva", False):
-                taxes = total_commission * 0.21  # Asumiendo 21% de IVA
+                taxes = total_commission * config.VAT_RATE
 
             # Verificación (opcional): La suma debe ser cercana al total de fees
             calculated_fees = total_commission + taxes

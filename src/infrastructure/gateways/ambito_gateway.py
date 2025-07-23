@@ -21,7 +21,7 @@ class AmbitoGateway:
         """
         url = f"{self.BASE_URL}/{endpoint}/historico-general/{start_date}/{end_date}"
         try:
-            response = requests.get(url, headers={'User-Agent': self.USER_AGENT}, timeout=15, verify=False)
+            response = requests.get(url, headers={'User-Agent': self.USER_AGENT}, timeout=15, verify=True)
             response.raise_for_status()
             json_response = response.json()
             return json_response[1:] if len(json_response) > 1 else []

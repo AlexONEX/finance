@@ -110,7 +110,7 @@ def get_validated_input(prompt: str, validation_func, error_msg: str):
 def get_transaction_details() -> dict:
     op_type = get_validated_input(
         "Operation type (BUY/SELL): ",
-        lambda v: v.upper() if v.upper() in ["BUY", "SELL"] else int("err"),
+        lambda v: v.upper() if v.upper() in ["BUY", "SELL"] else ValueError("err"),
         "Invalid type. Please enter 'BUY' or 'SELL'.",
     )
     date_obj = get_validated_input(
