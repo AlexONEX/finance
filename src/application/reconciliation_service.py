@@ -3,6 +3,7 @@ import pandas as pd
 import logging
 import os
 import config
+import numpy as np
 from src.shared.financial_utils import (
     map_instrument_to_asset_type,
     parse_option_details,
@@ -105,16 +106,14 @@ def _load_and_filter_new_transactions(processed_ids: set) -> list:
             market_fees = total_gross * market_tariff_pct
             broker_fees = total_gross * broker_tariff_pct
 
-            # Calcular IVA si aplica
             total_commission = market_fees + broker_fees
             taxes = 0
             if commissions_data.get("commissionIva", False):
                 taxes = total_commission * config.VAT_RATE
 
-            # Verificación (opcional): La suma debe ser cercana al total de fees
             calculated_fees = total_commission + taxes
             json_fees = abs(total_net - total_gross)
-            if not pd.np.isclose(calculated_fees, json_fees, atol=0.01):
+            if not np.isclose(calculated_fees, json_fees, atol=0.01):
                 logging.warning(
                     f"Fee calculation discrepancy for tx {tx_id}. Calculated: {calculated_fees}, From JSON: {json_fees}"
                 )

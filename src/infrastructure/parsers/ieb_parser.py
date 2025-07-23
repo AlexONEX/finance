@@ -5,8 +5,8 @@ from src.shared.types import TransactionData
 
 def parse_ieb_movement(movement: Dict[str, Any]) -> Optional[TransactionData]:
     """
-    Convierte un movimiento del historial de IEB a nuestro formato de transacción genérico.
-    Devuelve None si el movimiento no es una compra o venta soportada.
+    Parses a movement from the IEB API into a TransactionData object.
+    If the movement cannot be parsed, returns None.
     """
     op_type_map = {
         "CPRA": "BUY",
@@ -18,15 +18,12 @@ def parse_ieb_movement(movement: Dict[str, Any]) -> Optional[TransactionData]:
     if operation not in op_type_map:
         return None
 
-    # El nuevo endpoint no provee información detallada de fees o asset_type.
-    # Usamos valores por defecto y lo marcamos como una limitación a tener en cuenta.
-    # TODO: Encontrar una forma de enriquecer el `asset_type` si es necesario.
-    asset_type = "ACCION"  # Asumimos 'ACCION' por defecto.
+    asset_type = "ACCION"
 
     try:
         quantity = abs(float(movement["amount"]))
         if quantity <= 0:
-            return None  # Ignorar movimientos sin cantidad
+            return None
 
         parsed: TransactionData = {
             "op_type": op_type_map[operation],

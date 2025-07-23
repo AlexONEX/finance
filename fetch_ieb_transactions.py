@@ -30,7 +30,6 @@ def fetch_all_broker_transactions():
         "Referer": "https://hb.iebmas.com.ar/",
     }
     end_date = datetime.now()
-    # print dates
     print(
         "Fetching orders between {} and {}...".format(
             start_date.strftime("%d-%m-%Y"), end_date.strftime("%d-%m-%Y")
@@ -39,7 +38,6 @@ def fetch_all_broker_transactions():
     all_orders = []
     current_page = 0
     while True:
-        # print request post
         params = {
             "page": current_page,
             "size": 50,
@@ -133,25 +131,21 @@ def fetch_all_broker_transactions():
             }
         transformed_dividends.append(transformed_op)
 
-    # PASO 2: Combinar TODAS las operaciones
     all_movements = all_orders + transformed_dividends
 
     if all_movements:
         print("\nProcessing and saving all movements...")
 
-        # PASO 3: Crear un mapa de instrumentos COMPLETO desde la lista combinada
         final_instrument_map = {
             mov["symbol"]: mov["instrument"]
             for mov in all_movements
             if mov.get("instrument") and mov.get("symbol")
         }
 
-        # PASO 4: Rellenar los 'instrument' que faltan usando el mapa completo
         for mov in all_movements:
             if not mov.get("instrument") and mov.get("symbol"):
                 mov["instrument"] = final_instrument_map.get(mov["symbol"])
 
-        # PASO 5: Filtrar y ordenar como antes
         valid_movements = [
             mov
             for mov in all_movements

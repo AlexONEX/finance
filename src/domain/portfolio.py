@@ -2,11 +2,6 @@ import pandas as pd
 
 
 class Portfolio:
-    """
-    Represents the portfolio state. It is initialized with pre-loaded data
-    and does not handle file I/O or presentation logic.
-    """
-
     def __init__(
         self,
         open_positions: pd.DataFrame,

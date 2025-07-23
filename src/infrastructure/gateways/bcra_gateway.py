@@ -1,4 +1,3 @@
-# src/infrastructure/gateways/bcra_gateway.py
 import requests
 import logging
 
@@ -18,7 +17,6 @@ class BCRAAPIGateway:
         url = f"{self.BASE_URL}/{variable_id}"
 
         try:
-            # verify=False para evitar problemas de SSL que a veces tiene la API del BCRA.
             response = requests.get(url, timeout=15, verify=verify_ssl)
             response.raise_for_status()
             data = response.json()
