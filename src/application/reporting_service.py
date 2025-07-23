@@ -98,7 +98,6 @@ class ReportingService:
         self.price_cache = {}  # Reset cache for each report run
         positions = self.portfolio.open_positions.copy()
 
-        # Separate options first, as they are not consolidated
         options_positions = positions[positions["asset_type"] == "OPTION"]
         positions = positions[positions["asset_type"] != "OPTION"].copy()
 
@@ -117,7 +116,7 @@ class ReportingService:
                         "first_purchase_date": x["purchase_date"].min(),
                     }
                 ),
-                include_groups=False,  # Silences the FutureWarning
+                include_groups=False,
             )
             .reset_index()
         )

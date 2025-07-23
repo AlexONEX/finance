@@ -118,9 +118,7 @@ def fetch_all_broker_transactions():
                 "orderOperation": "DIVIDEND_STOCK"
                 if is_stock_dividend
                 else "DIVIDEND_CASH",
-                "instrument": instrument_map.get(
-                    ticker
-                ),  # Aquí podemos intentar un primer lookup
+                "instrument": instrument_map.get(ticker),
                 "symbol": ticker,
                 "currency": currency_map.get(div.get("currency"), "ARS"),
                 "executedAmount": earning_amount if is_stock_dividend else 1,

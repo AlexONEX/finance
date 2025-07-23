@@ -93,7 +93,6 @@ def _load_and_filter_new_transactions(processed_ids: set) -> list:
             if asset_type == "UNKNOWN":
                 continue
 
-            # **NUEVA LÓGICA PARA COMISIONES E IMPUESTOS**
             total_gross = float(tx.get("totalGross", 0))
             total_net = float(tx.get("total", 0))
             commissions_data = tx.get("commissions", {})
@@ -138,7 +137,7 @@ def _load_and_filter_new_transactions(processed_ids: set) -> list:
                 "quantity": float(tx["executedAmount"]),
                 "price": price,
                 "currency": tx["currency"],
-                "total_net": total_net,  # Guardamos el total neto para usarlo después
+                "total_net": total_net,
                 "market_fees": market_fees,
                 "broker_fees": broker_fees,
                 "taxes": taxes,
@@ -166,7 +165,6 @@ def _apply_sell_transaction(tx, open_positions, rates):
     if not rate:
         logging.warning(f"No exchange rate for {tx['ticker']} on {tx['date'].date()}")
 
-    # Usar el total neto de la venta
     revenue_ars = tx["total_net"] if tx["currency"] == "ARS" else tx["total_net"] * rate
     revenue_usd = revenue_ars / rate if rate else None
 
@@ -210,7 +208,6 @@ def _apply_sell_transaction(tx, open_positions, rates):
 
 
 def _save_portfolio_state(open_positions, newly_closed_trades):
-    # ... (sin cambios en esta función) ...
     """Saves the updated open positions and appends closed trades to CSV files."""
     open_df = pd.DataFrame(open_positions)
     open_df.rename(
@@ -241,7 +238,6 @@ def _save_portfolio_state(open_positions, newly_closed_trades):
         if col not in open_df.columns:
             open_df[col] = pd.NA
 
-    # Asegurarse de que no se guarden columnas extra como 'total_net'
     open_df = open_df.reindex(columns=final_cols)
 
     open_df.to_csv(config.OPEN_POSITIONS_FILE, index=False, date_format="%Y-%m-%d")
@@ -279,7 +275,6 @@ def reconcile_portfolio():
         if tx["op_type"] == "BUY":
             rate = rates.get_rate(tx["date"], tx["asset_type"])
 
-            # Usar el total neto de la compra para el costo
             cost_ars = (
                 tx["total_net"]
                 if tx["currency"] == "ARS"
